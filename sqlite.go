@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+
 	_ "github.com/mattn/go-sqlite3"
 
 	"time"
@@ -22,9 +23,20 @@ func init() {
 	db, err = sql.Open("sqlite3", "./sokol.db")
 	checkErr(err)
 }
+func getCount() (int, int) {
+	rows, err := db.Query("select min(oid),max(oid) from orders")
+	checkErr(err)
+	var min, max int
+	for rows.Next() {
+		err = rows.Scan(&min, &max)
+		checkErr(err)
+	}
+	return min, max
+}
 
-func getData(ochan chan<- Order, stopchan chan<- bool) {
-	rows, err := db.Query("select oid,cid,pid,account,amount from orders")
+func getData(ochan chan<- Order, i int) {
+	defer wg.Done()
+	rows, err := db.Query("select oid,cid,pid,account,amount from orders where oid >= ? and oid < ?", i, i+oneTimeGet)
 	checkErr(err)
 	var oid int
 	var cid string
@@ -39,10 +51,9 @@ func getData(ochan chan<- Order, stopchan chan<- bool) {
 		fillStatuses(&order)
 		fillBills(&order)
 		fillReq(&order)
-		// log.Prinln("send")
+		// log.Printf("Send %v", order)
 		ochan <- order
 	}
-	stopchan <- true
 }
 func fillStatuses(o *Order) {
 	oid := o.Oid
